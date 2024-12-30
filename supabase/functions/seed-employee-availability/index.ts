@@ -6,31 +6,31 @@ const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 const supabase = createClient(supabaseUrl, serviceRoleKey)
 
-// Updated shift patterns to ensure better coverage
+// Revised shift patterns for 24/7 coverage
 const SHIFT_PATTERNS = {
   EARLY: {
-    days: 5,
-    minEmployees: 8,
+    days: 4,
+    minEmployees: 15,
     startHourRange: [4, 6],
-    percentage: 0.25 // 25% of workforce
+    percentage: 0.6 // 60% of workforce should have early availability
   },
   DAY: {
-    days: 5,
-    minEmployees: 10,
+    days: 4,
+    minEmployees: 20,
     startHourRange: [7, 9],
-    percentage: 0.35 // 35% of workforce
+    percentage: 0.7 // 70% of workforce should have day availability
   },
   SWING: {
-    days: 5,
-    minEmployees: 7,
+    days: 4,
+    minEmployees: 15,
     startHourRange: [14, 16],
-    percentage: 0.25 // 25% of workforce
+    percentage: 0.6 // 60% of workforce should have swing availability
   },
   GRAVEYARD: {
     days: 4,
-    minEmployees: 6,
+    minEmployees: 12,
     startHourRange: [20, 22],
-    percentage: 0.15 // 15% of workforce
+    percentage: 0.5 // 50% of workforce should have graveyard availability
   }
 }
 
@@ -105,47 +105,81 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Calculate employee distribution
-    const employeeGroups = {
-      EARLY: employees.slice(0, Math.floor(employees.length * SHIFT_PATTERNS.EARLY.percentage)),
-      DAY: employees.slice(
-        Math.floor(employees.length * SHIFT_PATTERNS.EARLY.percentage),
-        Math.floor(employees.length * (SHIFT_PATTERNS.EARLY.percentage + SHIFT_PATTERNS.DAY.percentage))
-      ),
-      SWING: employees.slice(
-        Math.floor(employees.length * (SHIFT_PATTERNS.EARLY.percentage + SHIFT_PATTERNS.DAY.percentage)),
-        Math.floor(employees.length * (SHIFT_PATTERNS.EARLY.percentage + SHIFT_PATTERNS.DAY.percentage + SHIFT_PATTERNS.SWING.percentage))
-      ),
-      GRAVEYARD: employees.slice(
-        Math.floor(employees.length * (SHIFT_PATTERNS.EARLY.percentage + SHIFT_PATTERNS.DAY.percentage + SHIFT_PATTERNS.SWING.percentage))
-      )
-    }
-
     const availabilityEntries = []
 
-    // Create availability entries for each shift pattern
-    Object.entries(employeeGroups).forEach(([patternKey, groupEmployees]) => {
-      const pattern = SHIFT_PATTERNS[patternKey as keyof typeof SHIFT_PATTERNS]
-      const shiftType = patternKey === 'EARLY' ? 'Day Shift Early' :
-                       patternKey === 'DAY' ? 'Day Shift' :
-                       patternKey === 'SWING' ? 'Swing Shift' : 'Graveyard'
+    // Assign each employee to multiple shift patterns with higher probabilities
+    employees.forEach((employee, employeeIndex) => {
+      // Determine which patterns this employee will be available for
+      // Use the defined percentages instead of fixed probability
+      const patterns = Object.entries(SHIFT_PATTERNS).filter(([_, pattern]) => 
+        Math.random() < pattern.percentage
+      )
       
-      const shifts = shiftsByType[shiftType]
-      if (!shifts.length) {
-        console.log(`No shifts found for pattern ${patternKey}`)
-        return
+      if (patterns.length === 0) {
+        // If no patterns assigned, ensure at least two patterns
+        const shuffledPatterns = Object.entries(SHIFT_PATTERNS)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 2)
+        patterns.push(...shuffledPatterns)
+      } else if (patterns.length === 1) {
+        // If only one pattern, add another random one
+        const remainingPatterns = Object.entries(SHIFT_PATTERNS)
+          .filter(([key]) => !patterns.some(([p]) => p === key))
+        if (remainingPatterns.length > 0) {
+          patterns.push(remainingPatterns[Math.floor(Math.random() * remainingPatterns.length)])
+        }
       }
 
-      groupEmployees.forEach((employee, index) => {
-        // Rotate start days to ensure coverage throughout the week
-        const startDay = index % (7 - pattern.days + 1)
-        const selectedShift = shifts[index % shifts.length]
+      patterns.forEach(([patternKey, pattern]) => {
+        const shiftType = patternKey === 'EARLY' ? 'Day Shift Early' :
+                         patternKey === 'DAY' ? 'Day Shift' :
+                         patternKey === 'SWING' ? 'Swing Shift' : 'Graveyard'
+        
+        const shifts = shiftsByType[shiftType]
+        if (!shifts.length) {
+          console.log(`No shifts found for pattern ${patternKey}`)
+          return
+        }
 
-        // Add availability for consecutive days
+        // Distribute start days evenly across the week
+        // Use both employee index and pattern to ensure good distribution
+        const startDay = (employeeIndex + Object.keys(SHIFT_PATTERNS).indexOf(patternKey) * 2) % 7
+        
+        // Select shift based on employee index to distribute shift assignments
+        const selectedShift = shifts[employeeIndex % shifts.length]
+
+        // Add availability for consecutive days, wrapping around the week
         for (let i = 0; i < pattern.days; i++) {
+          const dayOfWeek = (startDay + i) % 7
+          
+          // Higher probability of adding each day (95% instead of 90%)
+          if (Math.random() < 0.95) {
+            availabilityEntries.push({
+              employee_id: employee.id,
+              day_of_week: dayOfWeek,
+              shift_id: selectedShift.id,
+              start_time: selectedShift.start_time,
+              end_time: selectedShift.end_time
+            })
+          }
+        }
+
+        // Add some extra availability on other days for flexibility
+        const remainingDays = Array.from({ length: 7 }, (_, i) => i)
+          .filter(day => !availabilityEntries.some(entry => 
+            entry.employee_id === employee.id && entry.day_of_week === day
+          ))
+        
+        // Add 1-2 extra days of availability
+        const extraDays = Math.floor(Math.random() * 2) + 1
+        for (let i = 0; i < extraDays && remainingDays.length > 0; i++) {
+          const randomDayIndex = Math.floor(Math.random() * remainingDays.length)
+          const dayOfWeek = remainingDays[randomDayIndex]
+          remainingDays.splice(randomDayIndex, 1)
+
           availabilityEntries.push({
             employee_id: employee.id,
-            day_of_week: (startDay + i) % 7,
+            day_of_week: dayOfWeek,
             shift_id: selectedShift.id,
             start_time: selectedShift.start_time,
             end_time: selectedShift.end_time
@@ -171,16 +205,28 @@ Deno.serve(async (req) => {
       console.log(`Inserted batch of ${batch.length} entries`)
     }
 
+    // Calculate distribution summary
+    const distributionByPattern = Object.fromEntries(
+      Object.keys(SHIFT_PATTERNS).map(pattern => [
+        pattern.toLowerCase(),
+        availabilityEntries.filter(entry => {
+          const hour = parseInt(entry.start_time.split(':')[0])
+          switch (pattern) {
+            case 'EARLY': return hour >= 4 && hour < 8
+            case 'DAY': return hour >= 8 && hour < 16
+            case 'SWING': return hour >= 16 && hour < 22
+            case 'GRAVEYARD': return hour >= 22 || hour < 4
+            default: return false
+          }
+        }).length
+      ])
+    )
+
     return new Response(
       JSON.stringify({ 
         message: `Successfully added availability for ${employees.length} employees`,
         totalEntries: availabilityEntries.length,
-        distributionSummary: {
-          early: employeeGroups.EARLY.length,
-          day: employeeGroups.DAY.length,
-          swing: employeeGroups.SWING.length,
-          graveyard: employeeGroups.GRAVEYARD.length
-        }
+        distributionSummary: distributionByPattern
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

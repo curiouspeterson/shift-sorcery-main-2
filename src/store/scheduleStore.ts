@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import type { ScheduleAssignment, CoverageStatus, Employee, Shift } from '@/types/scheduling';
-import { supabase } from '@/lib/supabase';
+import type { ScheduleAssignment, CoverageStatus, Employee, Shift } from '../types/scheduling';
+import { supabase } from '../lib/supabase';
+import { startOfWeek } from "date-fns";
 
 interface ScheduleState {
   assignments: ScheduleAssignment[];
@@ -86,7 +87,7 @@ export const useScheduleStore = create<ScheduleState>()(
           set({ isLoading: true, error: null });
           try {
             const { error } = await supabase
-              .from('schedule_assignments')
+              .from('   schedule_assignments')
               .insert([assignment]);
 
             if (error) throw error;
@@ -106,11 +107,11 @@ export const useScheduleStore = create<ScheduleState>()(
             const { error } = await supabase
               .from('schedule_assignments')
               .delete()
-              .eq('id', assignmentId);
+              .eq('schedule_id', assignmentId);
 
             if (error) throw error;
             set(state => ({
-              assignments: state.assignments.filter(a => a.id !== assignmentId)
+              assignments: state.assignments.filter(a => a.schedule_id !== assignmentId)
             }));
           } catch (error) {
             set({ error: error.message });

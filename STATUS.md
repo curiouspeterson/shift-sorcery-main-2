@@ -1,193 +1,136 @@
 # ScheduleMe Application Status
 
 ## Overview
-ScheduleMe is a web-based employee scheduling application designed to help managers create and manage work schedules while allowing employees to set their availability and request time off. The application uses Supabase for data persistence and authentication, React for the frontend, and follows modern web development practices.
+ScheduleMe is a web-based employee scheduling application built with React, TypeScript, and Supabase. It helps managers create and manage work schedules while enabling employees to set availability and request time off. The application uses a sophisticated scheduling engine to automatically generate schedules based on employee availability, coverage requirements, and business rules.
+
+## Core Features
+
+### Schedule Generation
+- Automated schedule creation using a multi-step scheduling engine
+- Coverage requirement validation and tracking
+- Shift distribution based on employee preferences and availability
+- Support for multiple shift types (Day Early, Day, Swing, Graveyard)
+- Draft and publish workflow for schedule management
+
+### Employee Management
+- Role-based access control (managers/employees)
+- Employee availability tracking
+- Time off request system
+- Weekly hour limits tracking
+- Shift acknowledgment system
+
+### Shift Management
+- Flexible shift definitions with start/end times
+- Maximum capacity controls per shift
+- Coverage requirement tracking
+- Peak period handling
+- Shift swap system
+
+## Technical Architecture
+
+### Frontend
+- React with TypeScript
+- Zustand for state management
+- TailwindCSS with Shadcn/UI components
+- React Query for data fetching
+- Date-fns for date manipulation
+
+### Backend (Supabase)
+- PostgreSQL database
+- Edge Functions for schedule generation
+- Row Level Security (RLS) for data access control
+- Real-time subscriptions for live updates
+- Serverless authentication
+
+### Scheduling Engine Components
+- SchedulingEngine: Core scheduling logic
+- CoverageCalculator: Staffing requirement validation
+- ShiftDistributor: Employee-shift assignment logic
+- EmployeeScoring: Preference-based assignment scoring
+- CoverageTracker: Real-time coverage monitoring
 
 ## Database Schema
 
 ### Core Tables
-- `profiles`: Stores user information and role (employee/manager)
-  - Links to auth.users for authentication
-  - Tracks weekly hour limits and role information
-  - Primary source for employee data
+- profiles: Employee information and role management
+- shifts: Shift definitions and constraints
+- schedules: Weekly schedule organization
+- schedule_assignments: Employee-shift assignments
+- employee_availability: Availability tracking
+- coverage_requirements: Staffing requirements
+- time_off_requests: Leave management
+- shift_swap_requests: Shift trading system
 
-- `shifts`: Defines available shift types and their time ranges
-  - Includes start/end times and duration
-  - Tracks maximum employee capacity
-  - Categorizes shifts (Day Early, Day, Swing, Graveyard)
+## Current Development Status
 
-- `schedules`: Contains weekly schedule information
-  - Tracks status (draft/published)
-  - Links to creator (manager)
-  - Organizes assignments by week
+### Recently Completed
+- Automated schedule generation
+- Coverage requirement tracking
+- Employee availability system
+- Schedule publishing workflow
+- Basic shift swapping functionality
 
-- `schedule_assignments`: Links employees to specific shifts
-  - Tracks shift acknowledgment
-  - Enables shift swapping
-  - Records assignment dates
+### In Progress
+- Enhanced shift distribution algorithm
+- Improved coverage validation
+- Mobile responsiveness improvements
+- Error handling enhancements
+- Testing implementation
 
-- `employee_availability`: Tracks when employees can work
-  - Flexible time ranges per day
-  - Not tied to specific shifts
-  - Supports complex availability patterns
+### Known Issues
+- Schedule generation sometimes creates uneven distribution
+- Peak period handling needs improvement
+- Mobile UI requires optimization
+- Shift swap validation needs enhancement
 
-- `time_off_requests`: Manages employee time off requests
-  - Tracks request status
-  - Includes date ranges
-  - Optional reason field
-
-- `shift_swap_requests`: Handles shift trading between employees
-  - Tracks requester and volunteer
-  - Manages approval status
-  - Links to specific assignments
-
-- `coverage_requirements`: Defines minimum staffing needs
-  - Supports peak period tracking
-  - Role-specific requirements
-  - Time-based staffing levels
-
-### Key Relationships
-- Each schedule can have multiple assignments
-- Assignments link employees, shifts, and schedules
-- Availability is tied to specific employees and days
-- Time off requests are linked to employees
-- Shift swaps reference specific schedule assignments
-
-### Access Control
-- Managers can view and modify all data
-- Employees can:
-  - View published schedules
-  - Manage their availability
-  - Submit time off requests
-  - Request shift swaps
-  - View their own assignments
-- All users can view basic shift information
-
-## Project Structure
-
-```
-src/
-├── components/
-│   ├── dashboard/
-│   │   ├── SidebarMenu.tsx
-│   │   └── SidebarProfile.tsx
-│   ├── employees/
-│   │   ├── availability/
-│   │   ├── EmployeeCard.tsx
-│   │   ├── EmployeeList.tsx
-│   │   └── EmployeeUpcomingShifts.tsx
-│   ├── schedule/
-│   │   ├── ScheduleCalendar.tsx
-│   │   ├── ScheduleControls.tsx
-│   │   └── ShiftUtils.ts
-│   └── ui/
-│       └── [shadcn components]
-├── hooks/
-│   ├── useAvailableEmployees.ts
-│   ├── useEmployeeData.ts
-│   └── use-mobile.tsx
-├── integrations/
-│   └── supabase/
-│       ├── client.ts
-│       └── types.ts
-├── pages/
-│   └── dashboard/
-│       ├── AvailabilityView.tsx
-│       ├── ScheduleView.tsx
-│       └── StatusView.tsx
-└── utils/
-    ├── scheduleUtils.ts
-    ├── shiftTypeUtils.ts
-    └── timeUtils.ts
-```
-
-## Working Features
-
-### Authentication
-- ✅ User authentication with email/password
-- ✅ Role-based access (managers vs employees)
-- ✅ Automatic profile creation on signup
-
-### Employee Management
-- ✅ View list of all employees
-- ✅ Managers can create new employee profiles
-- ✅ View individual employee details
-- ✅ Employee profile management
-
-### Availability Management
-- ✅ Employees can set their weekly availability
-- ✅ Availability is tied to specific days
-- ✅ Managers can view all employee availability
-- ✅ Individual availability calendar view
-
-### Time Off Management
-- ✅ Employees can submit time off requests
-- ✅ Managers can approve/deny requests
-- ✅ Status tracking for requests
-- ✅ Time off calendar view
-
-### Schedule Management
-- ✅ Weekly schedule view
-- ✅ Schedule generation for managers
-- ✅ Schedule publishing system
-- ✅ View published schedules
-- ✅ Delete schedules
-
-### Recent Improvements
-- ✅ Enhanced shift capacity tracking
-- ✅ More flexible employee availability system
-- ✅ Added shift swap functionality
-- ✅ Improved coverage requirements tracking
-- ✅ Added schedule acknowledgment system
-
-## Known Issues
-
-### Schedule Generation
-- ⚠️ Need to improve distribution of employees across shifts
-- ⚠️ Better handling of peak periods
-- ⚠️ More sophisticated employee preference matching
-
-### UI/UX
-- 📝 Mobile responsiveness needs enhancement
-- 📝 Better visual feedback for conflicts
-- 📝 More intuitive navigation
-- 📝 Enhanced calendar interactions
-
-## Upcoming Development Priorities
+## Upcoming Features
 
 ### Short Term (1-2 Months)
-1. Implement shift swap workflow
-2. Add notification system
-3. Improve mobile responsiveness
-4. Enhance error handling
-5. Add comprehensive testing
+1. Complete shift swap workflow
+2. Notification system
+3. Mobile responsive design
+4. Enhanced error handling
+5. Comprehensive testing suite
 
 ### Medium Term (3-6 Months)
-1. Implement advanced reporting
-2. Add schedule templates
-3. Integrate with external calendar systems
-4. Enhance performance monitoring
-5. Add data export capabilities
+1. Advanced reporting
+2. Schedule templates
+3. Calendar system integration
+4. Performance monitoring
+5. Data export capabilities
 
 ### Long Term (6+ Months)
-1. Develop mobile app version
-2. Add AI-powered scheduling suggestions
-3. Implement payroll system integration
-4. Add advanced analytics
-5. Create team management features
+1. Mobile application
+2. AI scheduling suggestions
+3. Payroll integration
+4. Advanced analytics
+5. Team management features
 
 ## Technical Debt
-- Improve test coverage
-- Enhance error boundaries
-- Add performance monitoring
-- Refactor large components
-- Improve state management patterns
+- Test coverage improvement
+- Component refactoring
+- Error boundary implementation
+- Performance optimization
+- State management refinement
 
-## Security
-- ✅ Row Level Security (RLS) implemented
-- ✅ Role-based access control
-- ✅ Secure authentication flow
-- ✅ Protected API endpoints
-- ✅ Data validation and sanitization
+## Security Measures
+- Row Level Security (RLS)
+- Role-based access control
+- Secure authentication
+- Protected API endpoints
+- Input validation and sanitization
 
-This status document will be updated as new features are added and issues are resolved.
+## Performance Considerations
+- Optimized database queries
+- Edge function deployment
+- Client-side caching
+- Lazy loading of components
+- Real-time updates optimization
+
+## Deployment
+- Frontend: Vercel/Netlify
+- Backend: Supabase Platform
+- Edge Functions: Supabase Edge Network
+- Database: Supabase Postgres
+
+This document is regularly updated to reflect the current state of development and upcoming priorities.

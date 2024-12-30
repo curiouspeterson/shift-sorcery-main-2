@@ -35,6 +35,37 @@ export function shiftCoversPeriod(shift: Shift, req: CoverageRequirement): boole
   return shiftStart <= reqEnd && shiftEnd >= reqStart;
 }
 
+export function isTimeOverlapping(
+  time1Start: string,
+  time1End: string,
+  time2Start: string,
+  time2End: string
+): boolean {
+  const toMinutes = (time: string) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
+  const start1 = toMinutes(time1Start);
+  const end1 = toMinutes(time1End);
+  const start2 = toMinutes(time2Start);
+  const end2 = toMinutes(time2End);
+
+  // Handle overnight shifts
+  if (end1 <= start1) {
+    return (end2 <= start2) ||
+           (start1 >= start2 && end2 >= start1) ||
+           (end1 <= end2 && start2 <= end1);
+  }
+
+  // Handle overnight availability
+  if (end2 <= start2) {
+    return start1 >= start2 || end1 <= end2;
+  }
+
+  return start1 >= start2 && end1 <= end2;
+}
+
 export function isShiftCompatible(
   employeePattern: ShiftType | undefined,
   shift: Shift,

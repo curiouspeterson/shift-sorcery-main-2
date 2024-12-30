@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { format, startOfWeek } from "date-fns";
 
 export default function StatusView() {
   const [statusContent, setStatusContent] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -19,6 +22,72 @@ export default function StatusView() {
     } catch (err) {
       console.error("Error loading status:", err);
       setError("Failed to load application status");
+    }
+  };
+
+  const createTestSchedule = async () => {
+    try {
+      setIsCreating(true);
+      const weekStart = format(startOfWeek(new Date()), 'yyyy-MM-dd');
+      
+      // Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error("No user found");
+
+      // Get first employee
+      const { data: employees, error: employeeError } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1)
+        .single();
+      
+      if (employeeError) throw employeeError;
+      if (!employees) throw new Error("No employees found");
+
+      // Get first shift
+      const { data: shifts, error: shiftError } = await supabase
+        .from('shifts')
+        .select('id')
+        .limit(1)
+        .single();
+      
+      if (shiftError) throw shiftError;
+      if (!shifts) throw new Error("No shifts found");
+
+      // Create schedule record
+      const { data: schedule, error: scheduleError } = await supabase
+        .from('schedules')
+        .insert({
+          week_start_date: weekStart,
+          status: 'draft',
+          created_by: user.id
+        })
+        .select()
+        .single();
+
+      if (scheduleError) throw scheduleError;
+
+      // Create a test assignment
+      const { error: assignmentError } = await supabase
+        .from('schedule_assignments')
+        .insert({
+          schedule_id: schedule.id,
+          employee_id: employees.id,
+          shift_id: shifts.id,
+          date: weekStart
+        });
+
+      if (assignmentError) throw assignmentError;
+
+      toast.success("Test schedule created", {
+        description: `Created schedule for week of ${weekStart}`
+      });
+    } catch (error: any) {
+      console.error('Failed to create test schedule:', error);
+      toast.error("Failed to create test schedule: " + error.message);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -60,7 +129,12 @@ export default function StatusView() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Application Status</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Application Status</h1>
+        <Button onClick={createTestSchedule} disabled={isCreating}>
+          {isCreating ? "Creating..." : "Create Test Schedule"}
+        </Button>
+      </div>
       <div className="prose prose-sm max-w-none dark:prose-invert">
         {statusContent.split("\n").map((line, index) => {
           if (line.startsWith("# ")) {

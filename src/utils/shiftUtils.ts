@@ -1,5 +1,7 @@
 import { Shift, ShiftType, CoverageRequirement } from '@/types';
-import { parseTime, doesTimeRangeOverlap } from '@/utils/timeUtils';
+import { parseTime, doesTimeRangeOverlap } from './timeUtils';
+import { format, startOfWeek } from 'date-fns';
+import { supabase } from '@/lib/supabase';
 
 export function getShiftDuration(shift: Shift): number {
   const start = parseTime(shift.start_time);
@@ -84,4 +86,38 @@ export function getShiftTimeRange(shiftType: ShiftType): { start: number; end: n
     default:
       return null;
   }
+}
+
+export async function generateScheduleForWeek(selectedDate: Date, userId: string) {
+  const weekStartDate = format(startOfWeek(selectedDate), 'yyyy-MM-dd');
+  
+  // Check if schedule already exists
+  const { data: existingSchedule } = await supabase
+    .from('schedules')
+    .select()
+    .eq('week_start_date', weekStartDate)
+    .maybeSingle();
+
+  if (existingSchedule) {
+    throw new Error('A schedule already exists for this week');
+  }
+
+  // Call the generate-schedule edge function
+  const { data, error } = await supabase.functions.invoke('generate-schedule', {
+    body: { 
+      weekStartDate,
+      userId 
+    }
+  });
+
+  if (error) {
+    console.error('Edge function error:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function publishSchedule(scheduleId: string) {
+  // Implementation
 }

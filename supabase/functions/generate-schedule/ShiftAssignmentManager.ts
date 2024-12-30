@@ -1,4 +1,4 @@
-import { Shift, Employee, Availability, ShiftAssignment } from './types.ts';
+import { Shift, Employee, EmployeeAvailability, ScheduleAssignment } from './types.ts';
 import { getShiftType, getShiftDuration } from './ShiftUtils.ts';
 import { ShiftRequirementsManager } from './ShiftRequirementsManager.ts';
 import { TimeSlotManager } from './TimeSlotManager.ts';
@@ -35,12 +35,30 @@ export class ShiftAssignmentManager {
     return this.dailyTracker.isEmployeeAssignedToday(employeeId);
   }
 
+  public canAssignShift(employee: Employee, shift: Shift): boolean {
+    const shiftDuration = getShiftDuration(shift);
+    const currentHours = this.weeklyHoursTracker.getCurrentHours(employee.id);
+    
+    // Check if adding this shift would exceed weekly hours
+    if (currentHours + shiftDuration > SCHEDULING_CONSTANTS.MAX_HOURS_PER_WEEK) {
+      console.log(`⚠️ Cannot assign shift to ${employee.first_name} ${employee.last_name} - would exceed ${SCHEDULING_CONSTANTS.MAX_HOURS_PER_WEEK} hours (current: ${currentHours}, shift: ${shiftDuration})`);
+      return false;
+    }
+
+    return true;
+  }
+
   public assignShift(
     scheduleId: string,
     employee: Employee,
     shift: Shift,
     date: string
-  ): void {
+  ): boolean {
+    // Check if we can assign this shift
+    if (!this.canAssignShift(employee, shift)) {
+      return false;
+    }
+
     const shiftType = getShiftType(shift.start_time);
     const shiftDuration = getShiftDuration(shift);
 
@@ -60,9 +78,11 @@ export class ShiftAssignmentManager {
     console.log(`- Time: ${shift.start_time} - ${shift.end_time}`);
     console.log(`- Duration: ${shiftDuration} hours`);
     console.log(`- Weekly hours: ${this.weeklyHoursTracker.getCurrentHours(employee.id)}`);
+
+    return true;
   }
 
-  public getAssignments(): ShiftAssignment[] {
+  public getAssignments(): ScheduleAssignment[] {
     return this.assignmentStorage.getAssignments();
   }
 

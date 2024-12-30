@@ -9,19 +9,8 @@ import StatusView from "./pages/dashboard/StatusView";
 import EmployeeAvailabilityPage from "./pages/dashboard/EmployeeAvailabilityPage";
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
-const queryClient = new QueryClient();
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from 'react-query';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { DashboardLayout } from "@/components/DashboardLayout";
-import Index from "./pages/Index";
-import ScheduleView from "./pages/dashboard/ScheduleView";
-import EmployeesView from "./pages/dashboard/EmployeesView";
-import AvailabilityView from "./pages/dashboard/AvailabilityView";
-import TimeOffView from "./pages/dashboard/TimeOffView";
-import ShiftsView from "./pages/dashboard/ShiftsView";
-import StatusView from "./pages/dashboard/StatusView";
-import EmployeeAvailabilityPage from "./pages/dashboard/EmployeeAvailabilityPage";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -36,7 +25,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<IndexPage />} />
             <Route
               path="/dashboard/*"
               element={

@@ -4,7 +4,6 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 interface Props {
   children: ReactNode;
 }
-}
 
 interface State {
   hasError: boolean;

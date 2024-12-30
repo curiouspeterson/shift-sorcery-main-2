@@ -33,8 +33,15 @@ export class SchedulingStrategy {
     let totalAssigned = 0;
     let totalRequired = 0;
 
+    // Sort shift types by required staff (highest first)
+    const sortedShiftTypes = Object.entries(shifts).sort((a, b) => {
+      const reqA = this.requirementsManager.getRequiredStaffForShiftType(a[0]);
+      const reqB = this.requirementsManager.getRequiredStaffForShiftType(b[0]);
+      return reqB - reqA;
+    });
+
     // Process each shift type
-    for (const [shiftType, typeShifts] of Object.entries(shifts)) {
+    for (const [shiftType, typeShifts] of sortedShiftTypes) {
       console.log(`\nProcessing ${shiftType} shifts...`);
       
       const required = this.requirementsManager.getRequiredStaffForShiftType(shiftType);
@@ -77,12 +84,12 @@ export class SchedulingStrategy {
     dayOfWeek: number,
     required: number
   ): Promise<number> {
-    console.log(`\nAssigning ${shiftType} - Need ${required} employees`);
+    console.log(`\n🎯 Assigning ${shiftType} - Need ${required} employees`);
 
     if (required === 0) return 0;
 
     let assigned = 0;
-    const availableEmployees = this.employeeAvailabilityManager.getAvailableEmployees(
+    let availableEmployees = this.employeeAvailabilityManager.getAvailableEmployees(
       employees,
       availability,
       dayOfWeek,
@@ -92,7 +99,7 @@ export class SchedulingStrategy {
 
     console.log(`Found ${availableEmployees.length} available employees for ${shiftType}`);
 
-    // Sort shifts by duration (longer shifts first)
+    // Sort shifts by duration and required staff (longer shifts and higher requirements first)
     const sortedShifts = [...shifts].sort((a, b) => {
       const getDuration = (shift: any) => {
         const startHour = parseInt(shift.start_time.split(':')[0]);
@@ -102,37 +109,63 @@ export class SchedulingStrategy {
       return getDuration(b) - getDuration(a);
     });
 
-    // Try to assign each shift
-    for (const shift of sortedShifts) {
-      if (assigned >= required) break;
+    // Try multiple passes with different strategies
+    for (let pass = 1; pass <= 2 && assigned < required; pass++) {
+      console.log(`\n📋 Pass ${pass} for ${shiftType}`);
 
-      const sortedEmployees = this.rankEmployees(availableEmployees, shift, currentDate);
-      
-      for (const employee of sortedEmployees) {
+      for (const shift of sortedShifts) {
         if (assigned >= required) break;
 
-        if (this.employeeAvailabilityManager.canAssignShift(
-          employee,
-          shift,
-          this.assignmentManager,
-          this.assignmentManager.getWeeklyHoursTracker()
-        )) {
-          this.assignmentManager.assignShift(scheduleId, employee, shift, currentDate);
-          assigned++;
-          
-          // Remove assigned employee from available pool
-          const index = availableEmployees.findIndex(e => e.id === employee.id);
-          if (index > -1) {
-            availableEmployees.splice(index, 1);
+        console.log(`\n📋 Processing shift: ${shift.name} (${shift.start_time}-${shift.end_time})`);
+        
+        // On second pass, try to assign any remaining employees
+        if (pass === 2) {
+          availableEmployees = this.employeeAvailabilityManager.getAvailableEmployees(
+            employees,
+            availability,
+            dayOfWeek,
+            [shift],
+            this.assignmentManager.getWeeklyHoursTracker()
+          );
+        }
+
+        const sortedEmployees = this.rankEmployees(availableEmployees, shift, currentDate);
+        
+        // Try all available employees for this shift
+        for (const employee of sortedEmployees) {
+          if (assigned >= required) break;
+
+          const canAssign = this.employeeAvailabilityManager.canAssignShift(
+            employee,
+            shift,
+            this.assignmentManager,
+            this.assignmentManager.getWeeklyHoursTracker()
+          );
+
+          if (canAssign) {
+            console.log(`✅ Assigning ${employee.first_name} ${employee.last_name} to ${shift.name}`);
+            this.assignmentManager.assignShift(scheduleId, employee, shift, currentDate);
+            assigned++;
+            
+            // Remove assigned employee from available pool
+            const index = availableEmployees.findIndex(e => e.id === employee.id);
+            if (index > -1) {
+              availableEmployees.splice(index, 1);
+            }
+          } else {
+            console.log(`❌ Cannot assign ${employee.first_name} ${employee.last_name} to ${shift.name}`);
           }
-          
-          break;
         }
       }
     }
 
     const staffingPercentage = (assigned / required) * 100;
-    console.log(`Staffing level for ${shiftType}: ${staffingPercentage.toFixed(1)}% (${assigned}/${required})`);
+    console.log(`\n📊 Staffing level for ${shiftType}: ${staffingPercentage.toFixed(1)}% (${assigned}/${required})`);
+    
+    if (assigned < required) {
+      console.log(`⚠️ Warning: Could not meet staffing requirements for ${shiftType}`);
+      console.log(`Missing ${required - assigned} assignments`);
+    }
     
     return assigned;
   }
@@ -143,8 +176,8 @@ export class SchedulingStrategy {
     currentDate: string,
   ): any[] {
     return [...employees].sort((a, b) => {
-      const scoreA = this.employeeScoring.scoreEmployee(a, shift, currentDate, this.assignmentManager.getAssignments());
-      const scoreB = this.employeeScoring.scoreEmployee(b, shift, currentDate, this.assignmentManager.getAssignments());
+      const scoreA = this.employeeScoring.scoreEmployee(a, shift, currentDate, this.assignmentManager.getAssignments(), shift.shift_type);
+      const scoreB = this.employeeScoring.scoreEmployee(b, shift, currentDate, this.assignmentManager.getAssignments(), shift.shift_type);
       return scoreB - scoreA;
     });
   }

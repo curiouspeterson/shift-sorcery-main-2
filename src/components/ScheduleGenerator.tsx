@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, startOfWeek, addWeeks, subWeeks } from "date-fns";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase";
 import { ScheduleCalendar } from "./schedule/ScheduleCalendar";
 import { ScheduleControls } from "./schedule/ScheduleControls";
 import { ScheduleHeader } from "./schedule/ScheduleHeader";
@@ -28,57 +28,91 @@ export function ScheduleGenerator() {
     queryKey: ["schedule", format(selectedDate, "yyyy-MM-dd")],
     queryFn: async () => {
       const weekStart = startOfWeek(selectedDate);
+      const weekStartStr = format(weekStart, "yyyy-MM-dd");
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) return null;
 
-      const { data: schedule, error } = await supabase
-        .from("schedules")
-        .select(`
-          *,
-          schedule_assignments(
+      try {
+        console.log('🔍 Fetching schedule for week:', weekStartStr);
+        
+        // First fetch the schedule with all fields
+        const { data: schedule, error: scheduleError } = await supabase
+          .from("schedules")
+          .select("*, created_by")
+          .eq("week_start_date", weekStartStr)
+          .maybeSingle();
+
+        if (scheduleError) {
+          console.error("Error fetching schedule:", scheduleError);
+          throw scheduleError;
+        }
+
+        if (!schedule) {
+          console.log('📅 No schedule found for week:', weekStartStr);
+          return { status: 'not_generated' };
+        }
+
+        console.log('📅 Found schedule:', schedule);
+
+        // Then fetch assignments with related data
+        const { data: assignments, error: assignmentsError } = await supabase
+          .from("schedule_assignments")
+          .select(`
             *,
             employee:profiles(*),
             shift:shifts(*)
-          )
-        `)
-        .eq("week_start_date", format(weekStart, "yyyy-MM-dd"))
-        .maybeSingle();
+          `)
+          .eq("schedule_id", schedule.id);
 
-      if (error) {
-        toast.error("Error fetching schedule", {
+        if (assignmentsError) {
+          console.error("Error fetching assignments:", assignmentsError);
+          throw assignmentsError;
+        }
+
+        console.log('📋 Found assignments:', assignments?.length || 0);
+        
+        const result = {
+          ...schedule,
+          schedule_assignments: assignments || []
+        };
+        
+        console.log('🔄 Returning schedule data:', result);
+        return result;
+      } catch (error: any) {
+        console.error('❌ Error fetching schedule data:', error);
+        toast.error("Error fetching schedule data", {
           description: error.message
         });
         throw error;
       }
-
-      return schedule;
     },
+    retry: false,
+    staleTime: 0,
     gcTime: 0
   });
 
   const handlePreviousWeek = () => {
     setSelectedDate(subWeeks(selectedDate, 1));
-    queryClient.invalidateQueries({
-      queryKey: ["schedule", format(subWeeks(selectedDate, 1), "yyyy-MM-dd")]
-    });
   };
 
   const handleNextWeek = () => {
     setSelectedDate(addWeeks(selectedDate, 1));
-    queryClient.invalidateQueries({
-      queryKey: ["schedule", format(addWeeks(selectedDate, 1), "yyyy-MM-dd")]
-    });
   };
 
   const handleScheduleGenerated = async () => {
-    await queryClient.invalidateQueries({
-      queryKey: ["schedule", format(selectedDate, "yyyy-MM-dd")]
-    });
+    console.log('🔄 Schedule generated, triggering refetch...');
     await refetch();
+    console.log('✅ Refetch complete, scheduleData:', scheduleData);
   };
 
   if (!userId) return null;
+
+  console.log('🎯 Rendering ScheduleGenerator with data:', {
+    isLoading,
+    hasSchedule: !!scheduleData,
+    assignmentsCount: scheduleData?.schedule_assignments?.length
+  });
 
   return (
     <div className="space-y-6">

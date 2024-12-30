@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, test } from 'vitest';
 import { CoverageCalculator } from '../CoverageCalculator';
 import type { ScheduleAssignment, Shift, CoverageRequirement } from '@/types/scheduling';
 

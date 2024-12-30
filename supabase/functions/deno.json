@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom"],
+    "types": [
+      "https://deno.land/std@0.208.0/http/server.ts",
+      "https://raw.githubusercontent.com/denoland/deno/v1.37.2/cli/tsc/dts/lib.deno.ns.d.ts",
+      "https://esm.sh/@supabase/supabase-js@2.38.4/dist/module/index.d.ts",
+      "https://esm.sh/date-fns@3.3.1/index.d.ts"
+    ]
+  },
+  "imports": {
+    "http/": "https://deno.land/std@0.208.0/http/",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.38.4/dist/module/index.js",
+    "date-fns": "https://esm.sh/date-fns@3.3.1"
+  }
+} 
