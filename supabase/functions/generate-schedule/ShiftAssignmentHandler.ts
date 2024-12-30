@@ -7,7 +7,7 @@ export class ShiftAssignmentHandler {
   ): number {
     return assignments
       .filter(a => a.employee_id === employeeId)
-      .reduce((total, assignment) => total + 8, 0);
+      .reduce((total, assignment) => total + 8, 0); // Assuming each shift is 8 hours for simplicity
   }
 
   public assignEmployeesToShift(
@@ -47,12 +47,12 @@ export class ShiftAssignmentHandler {
 
       const currentHours = this.getEmployeeAssignedHours(employee.id, assignments);
       const shiftHours = this.calculateShiftHours(shift);
-      
+
       console.log(`\n🧮 Evaluating ${employee.first_name} for ${shift.name}:`);
       console.log(`Current hours: ${currentHours}h`);
       console.log(`Shift duration: ${shiftHours}h`);
       console.log(`Weekly limit: ${employee.weekly_hours_limit}h`);
-      
+
       if ((currentHours + shiftHours) <= employee.weekly_hours_limit) {
         newAssignments.push({
           schedule_id: scheduleId,
@@ -62,7 +62,7 @@ export class ShiftAssignmentHandler {
         });
         assignedEmployees.add(employee.id);
         assignedCount++;
-        
+
         console.log(`✅ Assigned ${employee.first_name} to ${shift.name}`);
         console.log(`New weekly hours: ${currentHours + shiftHours}h`);
       } else {
@@ -81,11 +81,11 @@ export class ShiftAssignmentHandler {
   private calculateShiftHours(shift: any): number {
     const start = new Date(`2000-01-01T${shift.start_time}`);
     let end = new Date(`2000-01-01T${shift.end_time}`);
-    
+
     if (end <= start) {
       end = new Date(`2000-01-02T${shift.end_time}`);
     }
-    
+
     return (end.getTime() - start.getTime()) / (1000 * 60 * 60);
   }
 }

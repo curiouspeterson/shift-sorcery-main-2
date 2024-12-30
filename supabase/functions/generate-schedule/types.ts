@@ -71,6 +71,7 @@ export interface SchedulingContext {
   availability: EmployeeAvailability[];
   coverageRequirements: CoverageRequirement[];
   timeOffRequests: TimeOffRequest[];
+  shiftPreferences: any[];
 }
 
 export interface CoverageTracking {

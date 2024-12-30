@@ -7,44 +7,33 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export class DataFetcher {
   async fetchSchedulingData() {
     console.log('🔄 Starting data fetch...');
-    
+
     try {
       const [
         employeesResult,
         shiftsResult,
         coverageResult,
-        availabilityResult
+        availabilityResult,
+        timeOffResult,
+        shiftPreferencesResult
       ] = await Promise.all([
         supabase.from('profiles').select('*'),
         supabase.from('shifts').select('*'),
         supabase.from('coverage_requirements').select('*'),
-        supabase.from('employee_availability').select('*')
+        supabase.from('employee_availability').select('*'),
+        supabase.from('time_off_requests').select('*').eq('status', 'approved').gte('end_date', this.weekStartDate),
+        this.fetchShiftPreferences()
       ]);
 
-      // Log any errors from individual queries
-      if (employeesResult.error) console.error('❌ Employees fetch error:', employeesResult.error);
-      if (shiftsResult.error) console.error('❌ Shifts fetch error:', shiftsResult.error);
-      if (coverageResult.error) console.error('❌ Coverage requirements fetch error:', coverageResult.error);
-      if (availabilityResult.error) console.error('❌ Availability fetch error:', availabilityResult.error);
-
-      // Throw first error encountered
-      if (employeesResult.error) throw employeesResult.error;
-      if (shiftsResult.error) throw shiftsResult.error;
-      if (coverageResult.error) throw coverageResult.error;
-      if (availabilityResult.error) throw availabilityResult.error;
-
-      console.log('✅ Data fetch successful:', {
-        employees: employeesResult.data?.length || 0,
-        shifts: shiftsResult.data?.length || 0,
-        coverage: coverageResult.data?.length || 0,
-        availability: availabilityResult.data?.length || 0
-      });
+      // ...
 
       return {
         employees: employeesResult.data,
         shifts: shiftsResult.data,
         coverageReqs: coverageResult.data,
-        availability: availabilityResult.data
+        availability: availabilityResult.data,
+        timeOffRequests: timeOffResult.data,
+        shiftPreferences: shiftPreferencesResult
       };
     } catch (error) {
       console.error('❌ Data fetch failed:', error);
@@ -54,7 +43,7 @@ export class DataFetcher {
 
   async createSchedule(weekStartDate: string, userId: string) {
     console.log('🔄 Creating schedule for:', { weekStartDate, userId });
-    
+
     try {
       const { data, error } = await supabase
         .from('schedules')
@@ -88,7 +77,7 @@ export class DataFetcher {
     }
 
     console.log(`🔄 Saving ${assignments.length} assignments...`);
-    
+
     try {
       const { error } = await supabase
         .from('schedule_assignments')
@@ -108,7 +97,7 @@ export class DataFetcher {
 
   async deleteSchedule(scheduleId: string) {
     console.log('🔄 Deleting schedule:', scheduleId);
-    
+
     try {
       // First delete all assignments
       const { error: assignmentsError } = await supabase
@@ -139,9 +128,30 @@ export class DataFetcher {
     }
   }
 
+  async fetchShiftPreferences() {
+    console.log('Fetching shift preferences...');
+
+    try {
+      const { data, error } = await this.supabase
+        .from('shift_preferences')
+        .select('*');
+
+      if (error) {
+        console.error('Error fetching shift preferences:', error);
+        throw error;
+      }
+
+      console.log('Shift preferences fetched successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching shift preferences:', error);
+      throw error;
+    }
+  }
+
   async getAssignmentsCount(scheduleId: string): Promise<number> {
     console.log('🔄 Getting assignments count for schedule:', scheduleId);
-    
+
     try {
       const { count, error } = await supabase
         .from('schedule_assignments')

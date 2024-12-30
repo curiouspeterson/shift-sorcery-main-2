@@ -1,12 +1,17 @@
 export class ShiftTypeManager {
   private readonly PEAK_HOURS = {
-    start: 9, // 9 AM
-    end: 17,  // 5 PM
+    start: 9,  // 9 AM
+    end: 17,   // 5 PM
   };
+
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  }
 
   public groupAndSortShiftsByPriority(shifts: any[]): Record<string, any[]> {
     const grouped: Record<string, any[]> = {};
-    
+
     // Group shifts by type
     shifts.forEach(shift => {
       const type = this.getShiftTypeForTime(shift.start_time);
@@ -36,7 +41,7 @@ export class ShiftTypeManager {
 
   public getShiftTypeForTime(time: string): string {
     const hour = parseInt(time.split(':')[0]);
-    
+
     if (hour >= 4 && hour < 8) return "Day Shift Early";
     if (hour >= 8 && hour < 16) return "Day Shift";
     if (hour >= 16 && hour < 22) return "Swing Shift";
@@ -45,29 +50,14 @@ export class ShiftTypeManager {
 
   public isShiftDuringPeakHours(startTime: string, endTime: string): boolean {
     const start = this.timeToMinutes(startTime);
-    const end = this.timeToMinutes(endTime);
+    let end = this.timeToMinutes(endTime);
+
+    if (end < start) {
+      end += 24 * 60; // Adjust for overnight shifts
+    }
+
     const peakStart = this.PEAK_HOURS.start * 60;
     const peakEnd = this.PEAK_HOURS.end * 60;
-    
+
     // Check if any part of the shift overlaps with peak hours
     return (start < peakEnd && end > peakStart);
-  }
-
-  private timeToMinutes(time: string): number {
-    const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
-  }
-
-  public getPeakPeriodRequirements(shifts: any[]): Record<string, number> {
-    const requirements: Record<string, number> = {};
-    
-    shifts.forEach(shift => {
-      const type = this.getShiftTypeForTime(shift.start_time);
-      if (this.isShiftDuringPeakHours(shift.start_time, shift.end_time)) {
-        requirements[type] = (requirements[type] || 0) + 1;
-      }
-    });
-
-    return requirements;
-  }
-}

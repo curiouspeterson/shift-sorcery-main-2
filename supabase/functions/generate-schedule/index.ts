@@ -1,8 +1,5 @@
-/// <reference lib="deno.ns" />
-/// <reference lib="dom" />
-
-import { serve } from "https://deno.land/std@0.208.0/http/server.ts"
-import { createClient } from '@supabase/supabase-js'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SchedulingEngine } from './SchedulingEngine.ts'
 import type { SchedulingContext } from './types.ts'
 
@@ -21,18 +18,38 @@ serve(async (req) => {
     console.log('Received request:', { weekStartDate, userId })
 
     if (!weekStartDate || !userId) {
-      throw new Error('Missing required parameters')
+      throw new Error('Missing required parameters: weekStartDate and userId are required.')
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
     if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing Supabase configuration')
+      throw new Error('Missing Supabase configuration: Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.')
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
     console.log('Supabase client initialized')
+
+    // Check for existing schedule
+    console.log('Checking for existing schedule for week:', weekStartDate);
+    const { data: existingSchedule, error: checkError } = await supabase
+      .from('schedules')
+      .select()
+      .eq('week_start_date', weekStartDate)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error('Error checking existing schedule:', checkError);
+      throw new Error('Failed to check for existing schedule.');
+    }
+
+    if (existingSchedule) {
+      console.warn('Schedule already exists for week:', weekStartDate);
+      throw new Error('A schedule already exists for this week.');
+    }
+
+    console.log('No existing schedule found, proceeding with generation');
 
     // Create schedule record
     const { data: schedule, error: scheduleError } = await supabase
@@ -45,8 +62,18 @@ serve(async (req) => {
       .select()
       .single()
 
-    if (scheduleError) throw scheduleError
+    if (scheduleError) throw new Error(`Failed to create a schedule record: ${scheduleError.message}`);
     console.log('Created schedule:', schedule)
+
+    // Fetch shift preferences
+    const { data: shiftPreferences, error: shiftPreferencesError } = await supabase
+      .from('shift_preferences')
+      .select('*');
+
+    if (shiftPreferencesError) {
+      console.error('Error fetching shift preferences:', shiftPreferencesError);
+      throw new Error(`Failed to fetch shift preferences: ${shiftPreferencesError.message}`);
+    }
 
     // Fetch employees
     const { data: employees, error: employeesError } = await supabase
@@ -54,7 +81,7 @@ serve(async (req) => {
       .select('*')
       .order('first_name')
 
-    if (employeesError) throw employeesError
+    if (employeesError) throw new Error(`Failed to fetch employees: ${employeesError.message}`);
     console.log(`Fetched ${employees.length} employees`);
 
     // Fetch shifts
@@ -63,36 +90,34 @@ serve(async (req) => {
       .select('*')
       .order('start_time')
 
-    if (shiftsError) throw shiftsError
-    console.log(`Fetched ${shifts.length} shifts`)
+    if (shiftsError) throw new Error(`Failed to fetch shifts: ${shiftsError.message}`);
+    console.log(`Fetched ${shifts.length} shifts`);
 
     // Fetch availability
     const { data: availability, error: availabilityError } = await supabase
       .from('employee_availability')
-      .select('*')
+      .select('*');
 
-    if (availabilityError) throw availabilityError
-    console.log(`Fetched ${availability.length} availability records`)
+    if (availabilityError) throw new Error(`Failed to fetch employee availability: ${availabilityError.message}`);
 
-    // Fetch coverage requirements
-    const { data: coverageReqs, error: coverageError } = await supabase
+    // Fetch coverage
+    const { data: coverage, error: coverageError } = await supabase
       .from('coverage_requirements')
-      .select('*')
+      .select('*');
 
-    if (coverageError) throw coverageError
-    console.log(`Fetched ${coverageReqs.length} coverage requirements`)
+    if (coverageError) throw new Error(`Failed to fetch coverage requirements: ${coverageError.message}`);
 
-    // Fetch time off requests
-    const { data: timeOffRequests, error: timeOffError } = await supabase
+    // Fetch time off
+    const { data: timeOff, error: timeOffError } = await supabase
       .from('time_off_requests')
       .select('*')
       .eq('status', 'approved')
+      .gte('end_date', weekStartDate);
 
-    if (timeOffError) throw timeOffError
-    console.log(`Fetched ${timeOffRequests.length} approved time off requests`)
+    if (timeOffError) throw new Error(`Failed to fetch time off requests: ${timeOffError.message}`);
 
     // Initialize scheduling engine
-    const engine = new SchedulingEngine()
+    const engine = new SchedulingEngine();
 
     // Generate schedule
     const result = await engine.generateSchedule(
@@ -100,48 +125,47 @@ serve(async (req) => {
         employees,
         shifts,
         availability,
-        coverageRequirements: coverageReqs,
-        timeOffRequests
+        coverageRequirements: coverage,
+        timeOffRequests: timeOff,
+        shiftPreferences: shiftPreferences
       },
       new Date(weekStartDate),
       schedule.id
-    )
+    );
 
-    console.log(`Generated ${result.assignments.length} assignments`)
+    // Save assignments
 
-    // Save the generated assignments
     if (result.assignments.length > 0) {
-      const { error: saveError } = await supabase
+      const { error: assignmentsError } = await supabase
         .from('schedule_assignments')
-        .insert(result.assignments)
-
-      if (saveError) throw saveError
-      console.log('Successfully saved assignments to database')
+        .insert(result.assignments);
+      if (assignmentsError) throw new Error(`Failed to save assignments: ${assignmentsError.message}`);
     }
 
     return new Response(
       JSON.stringify({
-        success: true,
+        success: result.success,
         scheduleId: schedule.id,
-        assignmentsCount: result.assignments.length,
         coverage: result.coverage,
-        messages: result.messages
+        messages: result.messages,
+        assignmentsCount: result.assignments.length
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
+        status: 200
       }
-    )
+    );
+
   } catch (error) {
-    console.error('Error generating schedule:', error)
+    console.error('Error:', error)
     return new Response(
       JSON.stringify({
-        success: false,
-        error: error.message
+        error: error.message,
+        details: error.toString()
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
+        status: 400
       }
     )
   }

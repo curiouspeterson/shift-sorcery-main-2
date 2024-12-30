@@ -26,28 +26,23 @@ export class SchedulingStrategy {
     scheduleId: string
   ): Promise<boolean> {
     console.log(`\n=== Processing ${format(new Date(currentDate), 'EEEE, MMM d')} ===`);
-    
+
     const dayOfWeek = new Date(currentDate).getDay();
     const shifts = this.shiftTypeManager.groupAndSortShiftsByPriority(data.shifts);
     let overallSuccess = true;
-    let totalAssigned = 0;
-    let totalRequired = 0;
 
-    // Sort shift types by required staff (highest first)
-    const sortedShiftTypes = Object.entries(shifts).sort((a, b) => {
-      const reqA = this.requirementsManager.getRequiredStaffForShiftType(a[0]);
-      const reqB = this.requirementsManager.getRequiredStaffForShiftType(b[0]);
-      return reqB - reqA;
-    });
+    // First pass: Calculate requirements and identify peak periods
+    const requirements = this.calculateDailyRequirements(data.coverageReqs, currentDate);
+    console.log('Daily requirements:', requirements);
 
-    // Process each shift type
-    for (const [shiftType, typeShifts] of sortedShiftTypes) {
+    // Second pass: Assign shifts with priority
+    for (const [shiftType, typeShifts] of Object.entries(shifts)) {
       console.log(`\nProcessing ${shiftType} shifts...`);
-      
-      const required = this.requirementsManager.getRequiredStaffForShiftType(shiftType);
-      console.log(`Required staff for ${shiftType}: ${required}`);
-      
-      const assigned = await this.assignShiftType(
+
+      const shiftReqs = requirements[shiftType] || { required: 0, isPeak: false };
+      console.log(`Shift requirements for ${shiftType}:`, shiftReqs);
+
+      const success = await this.assignShiftType(
         shiftType,
         typeShifts as any[],
         data.employees,
@@ -55,23 +50,32 @@ export class SchedulingStrategy {
         scheduleId,
         currentDate,
         dayOfWeek,
-        required
+        shiftReqs,
+        data.shiftPreferences
       );
-      
-      totalAssigned += assigned;
-      totalRequired += required;
-      
-      if (assigned < required) {
-        console.log(`Warning: Could not fully staff ${shiftType} for ${currentDate}`);
-        console.log(`Assigned: ${assigned}, Required: ${required}`);
+
+      if (!success) {
         overallSuccess = false;
       }
     }
 
-    const staffingPercentage = (totalAssigned / totalRequired) * 100;
-    console.log(`Overall staffing for ${currentDate}: ${staffingPercentage.toFixed(1)}% (${totalAssigned}/${totalRequired})`);
-    
-    return staffingPercentage >= SCHEDULING_CONSTANTS.MIN_STAFF_PERCENTAGE;
+    return overallSuccess;
+  }
+
+  private calculateDailyRequirements(coverageReqs: any[], currentDate: string): Record<string, { required: number; isPeak: boolean }> {
+    const requirements: Record<string, { required: number; isPeak: boolean }> = {};
+
+    coverageReqs.forEach(req => {
+      const shiftType = this.shiftTypeManager.getShiftTypeForTime(req.start_time);
+      if (!requirements[shiftType]) {
+        requirements[shiftType] = { required: 0, isPeak: false };
+      }
+
+      requirements[shiftType].required = Math.max(requirements[shiftType].required, req.min_employees);
+      requirements[shiftType].isPeak = requirements[shiftType].isPeak || req.is_peak_period;
+    });
+
+    return requirements;
   }
 
   private async assignShiftType(
@@ -82,14 +86,14 @@ export class SchedulingStrategy {
     scheduleId: string,
     currentDate: string,
     dayOfWeek: number,
-    required: number
-  ): Promise<number> {
-    console.log(`\n🎯 Assigning ${shiftType} - Need ${required} employees`);
-
-    if (required === 0) return 0;
+    requirements: { required: number; isPeak: boolean },
+    shiftPreferences: any[]
+  ): Promise<boolean> {
+    const { required, isPeak } = requirements;
+    if (required === 0) return true;
 
     let assigned = 0;
-    let availableEmployees = this.employeeAvailabilityManager.getAvailableEmployees(
+    const availableEmployees = this.employeeAvailabilityManager.getAvailableEmployees(
       employees,
       availability,
       dayOfWeek,
@@ -97,88 +101,98 @@ export class SchedulingStrategy {
       this.assignmentManager.getWeeklyHoursTracker()
     );
 
-    console.log(`Found ${availableEmployees.length} available employees for ${shiftType}`);
+    console.log(`👥 Found ${availableEmployees.length} available employees for ${shiftType}`);
+    console.log(`📊 Requirements: ${required} employees${isPeak ? ' (Peak Period)' : ''}`);
 
-    // Sort shifts by duration and required staff (longer shifts and higher requirements first)
-    const sortedShifts = [...shifts].sort((a, b) => {
-      const getDuration = (shift: any) => {
-        const startHour = parseInt(shift.start_time.split(':')[0]);
-        const endHour = parseInt(shift.end_time.split(':')[0]);
-        return endHour < startHour ? (endHour + 24) - startHour : endHour - startHour;
-      };
-      return getDuration(b) - getDuration(a);
-    });
+    // Sort shifts by priority
+    const sortedShifts = this.sortShiftsByPriority(shifts);
 
-    // Try multiple passes with different strategies
-    for (let pass = 1; pass <= 2 && assigned < required; pass++) {
-      console.log(`\n📋 Pass ${pass} for ${shiftType}`);
+    // Try to assign each shift
+    for (const shift of sortedShifts) {
+      if (assigned >= required) break;
 
-      for (const shift of sortedShifts) {
+      const sortedEmployees = this.rankEmployeesForShift(
+        availableEmployees,
+        shift,
+        currentDate,
+        isPeak,
+        shiftPreferences
+      );
+
+      for (const employee of sortedEmployees) {
         if (assigned >= required) break;
 
-        console.log(`\n📋 Processing shift: ${shift.name} (${shift.start_time}-${shift.end_time})`);
-        
-        // On second pass, try to assign any remaining employees
-        if (pass === 2) {
-          availableEmployees = this.employeeAvailabilityManager.getAvailableEmployees(
-            employees,
-            availability,
-            dayOfWeek,
-            [shift],
-            this.assignmentManager.getWeeklyHoursTracker()
-          );
-        }
+        if (this.employeeAvailabilityManager.canAssignShift(
+          employee,
+          shift,
+          this.assignmentManager,
+          this.assignmentManager.getWeeklyHoursTracker()
+        )) {
+          console.log(`✅ Assigning ${employee.first_name} ${employee.last_name} to ${shift.name}`);
 
-        const sortedEmployees = this.rankEmployees(availableEmployees, shift, currentDate);
-        
-        // Try all available employees for this shift
-        for (const employee of sortedEmployees) {
-          if (assigned >= required) break;
+          this.assignmentManager.assignShift(scheduleId, employee, shift, currentDate);
+          assigned++;
 
-          const canAssign = this.employeeAvailabilityManager.canAssignShift(
-            employee,
-            shift,
-            this.assignmentManager,
-            this.assignmentManager.getWeeklyHoursTracker()
-          );
-
-          if (canAssign) {
-            console.log(`✅ Assigning ${employee.first_name} ${employee.last_name} to ${shift.name}`);
-            this.assignmentManager.assignShift(scheduleId, employee, shift, currentDate);
-            assigned++;
-            
-            // Remove assigned employee from available pool
-            const index = availableEmployees.findIndex(e => e.id === employee.id);
-            if (index > -1) {
-              availableEmployees.splice(index, 1);
-            }
-          } else {
-            console.log(`❌ Cannot assign ${employee.first_name} ${employee.last_name} to ${shift.name}`);
+          // Remove assigned employee from available pool
+          const index = availableEmployees.findIndex(e => e.id === employee.id);
+          if (index > -1) {
+            availableEmployees.splice(index, 1);
           }
+
+          break;
         }
       }
     }
 
     const staffingPercentage = (assigned / required) * 100;
-    console.log(`\n📊 Staffing level for ${shiftType}: ${staffingPercentage.toFixed(1)}% (${assigned}/${required})`);
-    
-    if (assigned < required) {
-      console.log(`⚠️ Warning: Could not meet staffing requirements for ${shiftType}`);
-      console.log(`Missing ${required - assigned} assignments`);
-    }
-    
-    return assigned;
+    console.log(`📊 Staffing level for ${shiftType}: ${staffingPercentage.toFixed(1)}% (${assigned}/${required})`);
+
+    return staffingPercentage >= SCHEDULING_CONSTANTS.MIN_STAFF_PERCENTAGE;
   }
 
-  private rankEmployees(
+  private sortShiftsByPriority(shifts: any[]): any[] {
+    return [...shifts].sort((a, b) => {
+      // Prioritize longer shifts
+      const durationDiff = b.duration_hours - a.duration_hours;
+      if (durationDiff !== 0) return durationDiff;
+
+      // Then sort by start time
+      return a.start_time.localeCompare(b.start_time);
+    });
+  }
+
+  private rankEmployeesForShift(
     employees: any[],
     shift: any,
     currentDate: string,
+    isPeakPeriod: boolean,
+    shiftPreferences: any[]
   ): any[] {
     return [...employees].sort((a, b) => {
-      const scoreA = this.employeeScoring.scoreEmployee(a, shift, currentDate, this.assignmentManager.getAssignments(), shift.shift_type);
-      const scoreB = this.employeeScoring.scoreEmployee(b, shift, currentDate, this.assignmentManager.getAssignments(), shift.shift_type);
+      const scoreA = this.employeeScoring.scoreEmployee(
+        a,
+        shift,
+        currentDate,
+        this.assignmentManager.getAssignments(),
+        shiftPreferences
+      );
+      const scoreB = this.employeeScoring.scoreEmployee(
+        b,
+        shift,
+        currentDate,
+        this.assignmentManager.getAssignments(),
+        shiftPreferences
+      );
       return scoreB - scoreA;
     });
+  }
+
+  private canAssignShift(employee: any, shift: any): boolean {
+    return this.employeeAvailabilityManager.canAssignShift(
+      employee,
+      shift,
+      this.assignmentManager,
+      this.assignmentManager.getWeeklyHoursTracker()
+    );
   }
 }
