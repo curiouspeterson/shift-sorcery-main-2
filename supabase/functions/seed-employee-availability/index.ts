@@ -96,18 +96,12 @@ Deno.serve(async (req) => {
 
       if (usesTenHourShifts) {
         // 4x10 pattern
-        // Get all available 10-hour shifts
-        const availableShifts = [...tenHourShifts]
-        
-        // Shuffle the shifts to randomize assignments
-        availableShifts.sort(() => Math.random() - 0.5)
+        // Select one 10-hour shift for this employee
+        const selectedShift = tenHourShifts[index % tenHourShifts.length]
 
-        // Create 6 days of availability
+        // Create 6 days of availability with the same shift
         for (let i = 0; i < 6; i++) {
           const dayOfWeek = (startDay + i) % 7
-          // Use different shifts for variety
-          const selectedShift = availableShifts[i % availableShifts.length]
-
           availabilityEntries.push({
             employee_id: employee.id,
             day_of_week: dayOfWeek,
@@ -118,33 +112,31 @@ Deno.serve(async (req) => {
         }
       } else {
         // 3x12 + 4 pattern
-        // Get all available 12-hour and 4-hour shifts
-        const availableTwelveHourShifts = [...twelveHourShifts].sort(() => Math.random() - 0.5)
-        const availableFourHourShifts = [...fourHourShifts].sort(() => Math.random() - 0.5)
+        // Select one 12-hour shift and one 4-hour shift for this employee
+        const selectedTwelveHourShift = twelveHourShifts[index % twelveHourShifts.length]
+        const selectedFourHourShift = fourHourShifts[index % fourHourShifts.length]
 
         // Create 6 days of availability
         for (let i = 0; i < 6; i++) {
           const dayOfWeek = (startDay + i) % 7
           
-          // First 4 days: mix of 12-hour shifts
-          // Last 2 days: 4-hour shifts
+          // First 4 days: 12-hour shift
+          // Last 2 days: 4-hour shift
           if (i < 4) {
-            const selectedShift = availableTwelveHourShifts[i % availableTwelveHourShifts.length]
             availabilityEntries.push({
               employee_id: employee.id,
               day_of_week: dayOfWeek,
-              shift_id: selectedShift.id,
-              start_time: selectedShift.start_time,
-              end_time: selectedShift.end_time
+              shift_id: selectedTwelveHourShift.id,
+              start_time: selectedTwelveHourShift.start_time,
+              end_time: selectedTwelveHourShift.end_time
             })
           } else {
-            const selectedShift = availableFourHourShifts[(i - 4) % availableFourHourShifts.length]
             availabilityEntries.push({
               employee_id: employee.id,
               day_of_week: dayOfWeek,
-              shift_id: selectedShift.id,
-              start_time: selectedShift.start_time,
-              end_time: selectedShift.end_time
+              shift_id: selectedFourHourShift.id,
+              start_time: selectedFourHourShift.start_time,
+              end_time: selectedFourHourShift.end_time
             })
           }
         }
