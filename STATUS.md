@@ -3,6 +3,15 @@
 ## Overview
 ScheduleMe is a web-based employee scheduling application built with React, TypeScript, and Supabase. It helps managers create and manage work schedules while enabling employees to set availability and request time off. The application uses a sophisticated scheduling engine to automatically generate schedules based on employee availability, coverage requirements, and business rules.
 
+## Comprehensive Analysis
+The core strength of ScheduleMe lies in its Scheduling Engine (implemented via Supabase Edge Functions). It uses multiple components—like the CoverageCalculator, ShiftDistributor, and various managers—to balance staff coverage against constraints such as weekly hour limits, time-off requests, and employee preferences. Real-time updates help keep managers informed of schedule changes. By storing relational data in a Postgres database and employing Row Level Security (RLS), the application ensures both high performance and secure, fine-grained access to the data.
+
+• Edge Functions: Responsible for schedule generation through an API-like interface, allowing the frontend to trigger scheduling without exposing sensitive logic or keys.  
+• CoverageCalculator: Checks whether each day’s coverage meets minimum staff requirements.  
+• ShiftDistributor: Responsible for assigning employees to shifts, respecting availability, existing assignments, and any custom logic (e.g., employee preferences or shift patterns).  
+• Real-Time Subscriptions: Enable live updates whenever employees modify their availability or request time off.  
+• Comprehensive Data Management: The solution spans multiple tables—profiles, shifts, schedules, schedule_assignments, etc.—to address every aspect of scheduling.
+
 ## Core Features
 
 ### Schedule Generation
